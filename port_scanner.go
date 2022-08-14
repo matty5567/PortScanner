@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"net"
 	"strconv"
@@ -12,17 +13,24 @@ type PortResult struct {
 	port    string
 }
 
-var IPV4_ADDRESS string = "51.183.47.213"
-var MAX_PORT int = 64000
+var maxPort int
 var TIMEOUT time.Duration = time.Second
-var NUM_WORKERS int = 100
+var numWorkers int = 100
+var targetIP string
 
 func main() {
-	ports_chan := make(chan string, MAX_PORT)
+
+	flag.StringVar(&targetIP, "targetIP", "127.0.0.1", "ip address to run scanner against")
+	flag.IntVar(&maxPort, "maxPort", 1024, "Maximum port to scan up to")
+	flag.IntVar(&numWorkers, "numWorkers", 50, "Number of goroutines to run")
+	flag.Parse()
+
+	fmt.Printf("Running port scanner on ip: %s, up to port %d with %d workers\n", targetIP, maxPort, numWorkers)
+	ports_chan := make(chan string, maxPort)
 	results_chan := make(chan PortResult)
 
 	// send ports to port_chan
-	for port := 1; port <= MAX_PORT; port++ {
+	for port := 1; port <= maxPort; port++ {
 		str_port := strconv.Itoa(port)
 		ports_chan <- str_port
 	}
@@ -31,11 +39,11 @@ func main() {
 	close(ports_chan)
 
 	// start workers
-	for w := 0; w < NUM_WORKERS; w++ {
+	for w := 0; w < numWorkers; w++ {
 		go worker(ports_chan, results_chan)
 	}
 
-	for i := 1; i < MAX_PORT; i++ {
+	for i := 1; i < maxPort; i++ {
 		portResult := <-results_chan
 
 		if portResult.success == true {
@@ -47,7 +55,7 @@ func main() {
 func worker(ports <-chan string, results chan<- PortResult) {
 	for port := range ports {
 
-		address := net.JoinHostPort(IPV4_ADDRESS, port)
+		address := net.JoinHostPort(targetIP, port)
 		conn, _ := net.DialTimeout("tcp", address, TIMEOUT)
 
 		var success bool
